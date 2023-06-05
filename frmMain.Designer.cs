@@ -30,7 +30,7 @@
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
-            MyMapObjects.moLayers moLayers4 = new MyMapObjects.moLayers();
+            MyMapObjects.moLayers moLayers1 = new MyMapObjects.moLayers();
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.文件ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.新建ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -638,6 +638,8 @@
             this.moMapRightMenu.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.moMapRightMenu.Name = "moMapRightMenu";
             this.moMapRightMenu.Size = new System.Drawing.Size(61, 4);
+            this.moMapRightMenu.ItemClicked += new System.Windows.Forms.ToolStripItemClickedEventHandler(this.moMapRightMenu_ItemClicked);
+            this.moMapRightMenu.VisibleChanged += new System.EventHandler(this.moMapRightMenu_VisibleChanged);
             // 
             // EditPointStrip
             // 
@@ -660,7 +662,7 @@
             // toolStripLabel1
             // 
             this.toolStripLabel1.Name = "toolStripLabel1";
-            this.toolStripLabel1.Size = new System.Drawing.Size(69, 24);
+            this.toolStripLabel1.Size = new System.Drawing.Size(69, 22);
             this.toolStripLabel1.Text = "编辑节点";
             // 
             // AddPointBtn
@@ -703,8 +705,9 @@
             // 
             this.moMapControl1.BackColor = System.Drawing.Color.White;
             this.moMapControl1.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
+            this.moMapControl1.ContextMenuStrip = this.moMapRightMenu;
             this.moMapControl1.FlashColor = System.Drawing.Color.Green;
-            this.moMapControl1.Layers = moLayers4;
+            this.moMapControl1.Layers = moLayers1;
             this.moMapControl1.Location = new System.Drawing.Point(367, 80);
             this.moMapControl1.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.moMapControl1.Name = "moMapControl1";

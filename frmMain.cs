@@ -37,7 +37,7 @@ namespace SimpleGIS
 
         //（2）与地图操作有关的变量
         /// <summary>
-        /// 一般设置为枚举类型。0，无， 1，放大， 2，缩小， 3，漫游， 4，选择， 5，识别， 6，编辑， 7，描绘要素， 8，编辑节点
+        /// 一般设置为枚举类型。0，无， 1，放大， 2，缩小， 3，漫游， 4，选择， 5，识别， 6，编辑（选择+移动）， 7，描绘要素， 8，编辑节点
         /// </summary>
         private Int32 mMapOpStyle = 0;
         private PointF mStartMouseLocation;        //用户拉框时，首先按下的鼠标位置
@@ -56,7 +56,10 @@ namespace SimpleGIS
         
 
         private Int32 mLastOpLayerIndex = -1;   //最近一次操作的图层索引
-        private Int32 mOperatingLayerIndex;  //当前操作的图层的索引
+        private Int32 mOperatingLayerIndex  //当前操作的图层的索引
+        {
+            get { return GetOpLayerIndex(); }
+        }
         private bool mIsInMove = false;
         private Int32 mMouseOnPartIndex = -1;   //鼠标位于多边形部件的索引
         private bool mIsInEditPoint = false;    //编辑节点状态
@@ -85,6 +88,7 @@ namespace SimpleGIS
         private List<MyMapObjects.moPoint> mSketchingPoint; //正在描绘的点
         private bool mEditMoMap = false;
         private List<Int32> mLayerIndex = new List<Int32>();
+        private List<MyMapObjects.moGeometry> mCopyingGeometries = new List<MyMapObjects.moGeometry>();
 
         //     public List<AttributeTable> All_tables = new List<AttributeTable>();//所有属性表的集合
 
@@ -120,6 +124,9 @@ namespace SimpleGIS
         }
 
         #endregion
+
+
+        #region 读写、新建图层
 
         private void 新建ToolStripMenuItem_Click(object sender, EventArgs e)
         {
@@ -415,7 +422,11 @@ namespace SimpleGIS
         {
             moMapControl1.FullExtent();
         }
+        #endregion
 
+
+
+        #region 编辑相关
 
         //编辑
         private void EditSpBtn_Click(object sender, EventArgs e)
@@ -436,7 +447,7 @@ namespace SimpleGIS
             CreateFeatureBtn.Enabled = true;
             SelectLayer.Enabled = true;
             RefreshSelectLayer();
-            MoveFeatureBtn_Click(sender, e);
+            MoveFeatureBtn_Click(sender, e); // 开始编辑后。先默认为移动操作
             mNeedToSave = false;
             mEditMoMap = true;
         }
@@ -488,7 +499,7 @@ namespace SimpleGIS
             moMapControl1.RedrawMap();
         }
 
-        //编辑要素
+        //编辑要素（移动+选择）
         private void MoveFeatureBtn_Click(object sender, EventArgs e)
         {
             if (mOperatingLayerIndex == -1) return;
@@ -632,6 +643,71 @@ namespace SimpleGIS
                 BeginEditItem_Click(sender, e);
             }
         }
+        #endregion
+
+
+        #region 右击菜单
+
+        private void moMapRightMenu_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
+        {
+            if (mMapOpStyle == 6)
+            {
+                RightOperateInSelect(e);
+            }
+            else if (mMapOpStyle == 7)
+            {
+                RightOperateInSketch(e);
+            }
+            else if (mMapOpStyle == 8)
+            {
+                RightOperateInEditPoint(e);
+            }
+        }
+
+        private void moMapRightMenu_VisibleChanged(object sender, EventArgs e)
+        {
+            if (mOperatingLayerIndex == -1) return;
+            if (mMapOpStyle == 6)
+            {
+                MyMapObjects.moMapLayer sLayer = moMapControl1.Layers.GetItem(mOperatingLayerIndex);
+                if (sLayer.SelectedFeatures.Count == 0)
+                {
+                    moMapRightMenu.Items[0].Enabled = false;
+                    moMapRightMenu.Items[2].Enabled = false;
+                    moMapRightMenu.Items[3].Enabled = false;
+                }
+                else
+                {
+                    moMapRightMenu.Items[0].Enabled = true;
+                    moMapRightMenu.Items[2].Enabled = true;
+                    moMapRightMenu.Items[3].Enabled = true;
+                }
+                if (mCopyingGeometries.Count == 0) moMapRightMenu.Items[1].Enabled = false;
+                else moMapRightMenu.Items[1].Enabled = true;
+            }
+            if (mMapOpStyle == 7)
+            {
+                if (mSketchingPoint.Count == 0 && mSketchingShape.Count == 1 && mSketchingShape[0].Count == 0)
+                {
+                    for (Int32 i = 0; i < 5; i++) moMapRightMenu.Items[i].Enabled = false;
+                }
+                else
+                {
+                    for (Int32 i = 0; i < 5; i++) moMapRightMenu.Items[i].Enabled = true;
+                }
+            }
+            if (mMapOpStyle == 8)
+            {
+                if (mEditPointOperation.Count == 0)
+                {
+                    moMapRightMenu.Items[1].Enabled = false;
+                }
+                else moMapRightMenu.Items[1].Enabled = true;
+            }
+        }
+
+        #endregion
+
 
 
         #region MouseDown
@@ -1472,16 +1548,31 @@ namespace SimpleGIS
 
         private void moMapControl1_AfterTrackingLayerDraw(object sender, moUserDrawingTool drawTool)
         {
-
+            DrawSketchingShapes(drawTool);   //绘制描绘图形
+            DrawEditingShapes(drawTool); //绘制正在编辑的图形
         }
 
         private void moMapControl1_MapScaleChanged(object sender)
         {
-
+            ShowMapScale();
         }
 
 
         #region 私有函数 
+
+        //获取当前操作图层索引
+        private Int32 GetOpLayerIndex()
+        {
+            if (SelectLayer.SelectedIndex == -1)
+            {
+                if (mEditMoMap == true) return -1;
+                else return mLastOpLayerIndex;
+            }
+            else
+            {
+                return mLayerIndex[SelectLayer.SelectedIndex];
+            }
+        }
 
         // 初始化描绘图形
         private void InitializeSketchingShape()
@@ -2086,6 +2177,411 @@ namespace SimpleGIS
             mElasticSymbol.Size = 0.52;
             mElasticSymbol.Style = MyMapObjects.moSimpleLineSymbolStyleConstant.Dash;
         }
+
+        //绘制正在描绘的图形
+        private void DrawSketchingShapes(MyMapObjects.moUserDrawingTool drawingTool)
+        {
+            if (mOperatingLayerIndex == -1) return;
+            MyMapObjects.moMapLayer sLayer = moMapControl1.Layers.GetItem(mOperatingLayerIndex);
+            if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+            {
+                if (mSketchingShape == null)
+                    return;
+                Int32 sPartCount = mSketchingShape.Count;
+                //绘制已经描绘完成的部分
+                for (Int32 i = 0; i <= sPartCount - 2; i++)
+                {
+                    drawingTool.DrawPolygon(mSketchingShape[i], mEditingPolygonSymbol);
+                }
+                //正在描绘的部分（只有一个Part）
+                MyMapObjects.moPoints sLastPart = mSketchingShape.Last();
+                if (sLastPart.Count >= 2)
+                    drawingTool.DrawPolyline(sLastPart, mEditingPolygonSymbol.Outline);
+                //绘制所有顶点手柄
+                for (Int32 i = 0; i <= sPartCount - 1; i++)
+                {
+                    MyMapObjects.moPoints sPoints = mSketchingShape[i];
+                    drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+                }
+            }
+            else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+            {
+                if (mSketchingShape == null)
+                    return;
+                Int32 sPartCount = mSketchingShape.Count;
+                //绘制已经描绘完成的部分
+                for (Int32 i = 0; i <= sPartCount - 2; i++)
+                {
+                    drawingTool.DrawPolyline(mSketchingShape[i], mEditingPolylineSymbol);
+                }
+                //正在描绘的部分（只有一个Part）
+                MyMapObjects.moPoints sLastPart = mSketchingShape.Last();
+                if (sLastPart.Count >= 2)
+                {
+                    drawingTool.DrawPolyline(sLastPart, mEditingPolylineSymbol);
+                }
+                //绘制所有顶点手柄
+                for (Int32 i = 0; i <= sPartCount - 1; i++)
+                {
+                    MyMapObjects.moPoints sPoints = mSketchingShape[i];
+                    drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+                }
+            }
+            else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.Point)
+            {
+                if (mSketchingPoint == null || mSketchingPoint.Count == 0)
+                    return;
+                drawingTool.DrawPoint(mSketchingPoint[0], mEditingVertexSymbol);
+            }
+            else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+            {
+                if (mSketchingPoint == null || mSketchingPoint.Count == 0)
+                    return;
+                MyMapObjects.moPoints sPoints = new MyMapObjects.moPoints();
+                sPoints.AddRange(mSketchingPoint.ToArray());
+                drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+            }
+        }
+
+        //绘制正在编辑的图形
+        private void DrawEditingShapes(MyMapObjects.moUserDrawingTool drawingTool)
+        {
+            if (mEditingGeometry == null)
+                return;
+            if (mEditingGeometry.GetType() == typeof(MyMapObjects.moMultiPolygon))
+            {
+                MyMapObjects.moMultiPolygon sMultiPolygon = (MyMapObjects.moMultiPolygon)mEditingGeometry;
+                //绘制边界
+                drawingTool.DrawMultiPolygon(sMultiPolygon, mEditingPolygonSymbol);
+                //绘制顶点手柄
+                Int32 sPartCount = sMultiPolygon.Parts.Count;
+                for (Int32 i = 0; i <= sPartCount - 1; i++)
+                {
+                    MyMapObjects.moPoints sPoints = sMultiPolygon.Parts.GetItem(i);
+                    drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+                }
+            }
+            else if (mEditingGeometry.GetType() == typeof(MyMapObjects.moMultiPolyline))
+            {
+                MyMapObjects.moMultiPolyline sMultiPolyline = (MyMapObjects.moMultiPolyline)mEditingGeometry;
+                drawingTool.DrawMultiPolyline(sMultiPolyline, mEditingPolylineSymbol);
+                Int32 sPartCount = sMultiPolyline.Parts.Count;
+                for (Int32 i = 0; i <= sPartCount - 1; i++)
+                {
+                    MyMapObjects.moPoints sPoints = sMultiPolyline.Parts.GetItem(i);
+                    drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+                }
+            }
+            else if (mEditingGeometry.GetType() == typeof(MyMapObjects.moPoint))
+            {
+                MyMapObjects.moPoint sPoint = (MyMapObjects.moPoint)mEditingGeometry;
+                drawingTool.DrawPoint(sPoint, mEditingVertexSymbol);
+            }
+            else if (mEditingGeometry.GetType() == typeof(MyMapObjects.moPoints))
+            {
+                MyMapObjects.moPoints sPoints = (MyMapObjects.moPoints)mEditingGeometry;
+                drawingTool.DrawPoints(sPoints, mEditingVertexSymbol);
+            }
+        }
+
+        //选择状态右键菜单操作
+        private void RightOperateInSelect(ToolStripItemClickedEventArgs e)
+        {
+            if (mOperatingLayerIndex == -1) return;
+            MyMapObjects.moMapLayer sLayer = moMapControl1.Layers.GetItem(mOperatingLayerIndex);
+            if (e.ClickedItem.Text == "删除")
+            {
+                mNeedToSave = true;
+                sLayer.RemoveSelection();
+                moMapControl1.RedrawMap();
+            }
+            if (e.ClickedItem.Text == "复制")
+            {
+                //CopySelectedFeatures();
+                MessageBox.Show("未实现！");
+            }
+            if (e.ClickedItem.Text == "粘贴")
+            {
+                //PasteSelectedFeatures();
+                MessageBox.Show("未实现！");
+            }
+            if (e.ClickedItem.Text == "复制并粘贴到新建图层")
+            {
+                //CopySelectedFeatures();
+                //MyMapObjects.moGeometryTypeConstant shapeType = moMapControl1.Layers.GetItem(mOperatingLayerIndex).ShapeType;
+                //CreateLayer newLayer = new CreateLayer();
+                //newLayer.Owner = this;
+                //newLayer.FixedType(shapeType);
+                //newLayer.ShowDialog();
+                MessageBox.Show("未实现！");
+            }
+        }
+
+        //描绘状态右键菜单操作
+        private void RightOperateInSketch(ToolStripItemClickedEventArgs e)
+        {
+            if (mOperatingLayerIndex == -1) return;
+            MyMapObjects.moMapLayer sLayer = moMapControl1.Layers.GetItem(mOperatingLayerIndex);
+            if (e.ClickedItem.Text == "结束部件")
+            {
+                EndSketchPart(sLayer.ShapeType);
+            }
+            else if (e.ClickedItem.Text == "完成草图")
+            {
+                EndSketchGeo(sLayer.ShapeType);
+            }
+            else if (e.ClickedItem.Text == "撤销绘制中节点")
+            {
+                DeleteLastSketchPoint(sLayer.ShapeType);
+            }
+            else if (e.ClickedItem.Text == "撤销绘制中部件")
+            {
+                DeleteLastSketchPart(sLayer.ShapeType);
+            }
+            else if (e.ClickedItem.Text == "撤销绘制中草图")
+            {
+                DeleteLastSketchGeo();
+            }
+        }
+
+        //编辑节点状态下右键菜单操作
+        private void RightOperateInEditPoint(ToolStripItemClickedEventArgs e)
+        {
+            if (mOperatingLayerIndex == -1) return;
+            MyMapObjects.moMapLayer sLayer = moMapControl1.Layers.GetItem(mOperatingLayerIndex);
+            if (e.ClickedItem.Text == "完成节点编辑")
+            {
+                MoveFeatureBtn_Click(new object(), e);
+            }
+            if (e.ClickedItem.Text == "撤销上一步操作")
+            {
+                Int32 editOp = mEditPointOperation.Last();
+                if (editOp == 1)
+                {
+                    if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+                    {
+                        MyMapObjects.moMultiPolygon sMultiPolygon = (MyMapObjects.moMultiPolygon)mEditingGeometry;
+                        MyMapObjects.moPoint sPoint = sMultiPolygon.Parts.GetItem(mPastPartIndex.Last()).GetItem(mPastPointIndex.Last());
+                        sPoint.X = mEditPointRecord.Last().X;
+                        sPoint.Y = mEditPointRecord.Last().Y;
+                        sMultiPolygon.UpdateExtent();
+                        mEditingGeometry = sMultiPolygon;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+                    {
+                        MyMapObjects.moMultiPolyline sMultiPolyline = (MyMapObjects.moMultiPolyline)mEditingGeometry;
+                        MyMapObjects.moPoint sPoint = sMultiPolyline.Parts.GetItem(mPastPartIndex.Last()).GetItem(mPastPointIndex.Last());
+                        sPoint.X = mEditPointRecord.Last().X;
+                        sPoint.Y = mEditPointRecord.Last().Y;
+                        sMultiPolyline.UpdateExtent();
+                        mEditingGeometry = sMultiPolyline;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.Point)
+                    {
+                        MyMapObjects.moPoint sPoint = (MyMapObjects.moPoint)mEditingGeometry;
+                        sPoint.X = mEditPointRecord.Last().X;
+                        sPoint.Y = mEditPointRecord.Last().Y;
+                        mEditingGeometry = sPoint;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+                    {
+                        MyMapObjects.moPoints sPoints = (MyMapObjects.moPoints)mEditingGeometry;
+                        MyMapObjects.moPoint sPoint = sPoints.GetItem(mPastPointIndex.Last());
+                        sPoint.X = mEditPointRecord.Last().X;
+                        sPoint.Y = mEditPointRecord.Last().Y;
+                        sPoints.UpdateExtent();
+                        mEditingGeometry = sPoints;
+                    }
+                    mEditPointOperation.RemoveAt(mEditPointOperation.Count - 1);
+                    mEditPointRecord.RemoveAt(mEditPointRecord.Count - 1);
+                    mPastPartIndex.RemoveAt(mPastPartIndex.Count - 1);
+                    mPastPointIndex.RemoveAt(mPastPointIndex.Count - 1);
+                    moMapControl1.RedrawTrackingShapes();
+                }
+                else if (editOp == 2)
+                {
+                    if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+                    {
+                        MyMapObjects.moMultiPolygon sMultiPolygon = (MyMapObjects.moMultiPolygon)mEditingGeometry;
+                        sMultiPolygon.Parts.GetItem(mPastPartIndex.Last()).RemoveAt(mPastPointIndex.Last() + 1);
+                        sMultiPolygon.UpdateExtent();
+                        mEditingGeometry = sMultiPolygon;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+                    {
+                        MyMapObjects.moMultiPolyline sMultiPolyline = (MyMapObjects.moMultiPolyline)mEditingGeometry;
+                        sMultiPolyline.Parts.GetItem(mPastPartIndex.Last()).RemoveAt(mPastPointIndex.Last() + 1);
+                        sMultiPolyline.UpdateExtent();
+                        mEditingGeometry = sMultiPolyline;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.Point)
+                    {
+                        ;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+                    {
+                        MyMapObjects.moPoints sPoints = (MyMapObjects.moPoints)mEditingGeometry;
+                        sPoints.RemoveAt(mPastPointIndex.Last());
+                        sPoints.UpdateExtent();
+                        mEditingGeometry = sPoints;
+                    }
+                    mEditPointOperation.RemoveAt(mEditPointOperation.Count - 1);
+                    mPastPartIndex.RemoveAt(mPastPartIndex.Count - 1);
+                    mPastPointIndex.RemoveAt(mPastPointIndex.Count - 1);
+                    moMapControl1.RedrawTrackingShapes();
+                }
+                else if (editOp == 3)
+                {
+                    if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+                    {
+                        MyMapObjects.moMultiPolygon sMultiPolygon = (MyMapObjects.moMultiPolygon)mEditingGeometry;
+                        MyMapObjects.moPoints sPoints = sMultiPolygon.Parts.GetItem(mPastPartIndex.Last());
+                        sPoints.Insert(mPastPointIndex.Last(), mEditPointRecord.Last());
+                        sMultiPolygon.UpdateExtent();
+                        mEditingGeometry = sMultiPolygon;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+                    {
+                        MyMapObjects.moMultiPolyline sMultiPolyline = (MyMapObjects.moMultiPolyline)mEditingGeometry;
+                        MyMapObjects.moPoints sPoints = sMultiPolyline.Parts.GetItem(mPastPartIndex.Last());
+                        sPoints.Insert(mPastPointIndex.Last(), mEditPointRecord.Last());
+                        sMultiPolyline.UpdateExtent();
+                        mEditingGeometry = sMultiPolyline;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.Point)
+                    {
+                        ;
+                    }
+                    else if (sLayer.ShapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+                    {
+                        MyMapObjects.moPoints sPoints = (MyMapObjects.moPoints)mEditingGeometry;
+                        sPoints.Insert(mPastPointIndex.Last(), mEditPointRecord.Last());
+                        sPoints.UpdateExtent();
+                        mEditingGeometry = sPoints;
+                    }
+                    mEditPointOperation.RemoveAt(mEditPointOperation.Count - 1);
+                    mEditPointRecord.RemoveAt(mEditPointRecord.Count - 1);
+                    mPastPartIndex.RemoveAt(mPastPartIndex.Count - 1);
+                    mPastPointIndex.RemoveAt(mPastPointIndex.Count - 1);
+                    moMapControl1.RedrawTrackingShapes();
+                }
+            }
+        }
+
+        //删除上一个节点
+        private void DeleteLastSketchPoint(MyMapObjects.moGeometryTypeConstant shapeType)
+        {
+            mNeedToSave = true;
+            if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+            {
+                Int32 pointsNum = mSketchingShape.Last().Count;
+                if (pointsNum == 0)
+                {
+                    Int32 partsNum = mSketchingShape.Count;
+                    if (partsNum > 1)
+                    {
+                        mSketchingShape.RemoveAt(partsNum - 1);
+                        Int32 newPointsNum = mSketchingShape.Last().Count;
+                        mSketchingShape.Last().RemoveAt(newPointsNum - 1);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                else mSketchingShape.Last().RemoveAt(pointsNum - 1);
+                moMapControl1.RedrawTrackingShapes();
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+            {
+                Int32 pointsNum = mSketchingShape.Last().Count;
+                if (pointsNum == 0)
+                {
+                    Int32 partsNum = mSketchingShape.Count;
+                    if (partsNum > 1)
+                    {
+                        mSketchingShape.RemoveAt(partsNum - 1);
+                        Int32 newPointsNum = mSketchingShape.Last().Count;
+                        mSketchingShape.Last().RemoveAt(newPointsNum - 1);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                else mSketchingShape.Last().RemoveAt(pointsNum - 1);
+                moMapControl1.RedrawTrackingShapes();
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.Point)
+            {
+                ;
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+            {
+                Int32 pointsNum = mSketchingPoint.Count;
+                if (pointsNum == 0) return;
+                mSketchingPoint.RemoveAt(pointsNum - 1);
+                moMapControl1.RedrawTrackingShapes();
+            }
+        }
+
+        //撤销上一个部件
+        private void DeleteLastSketchPart(MyMapObjects.moGeometryTypeConstant shapeType)
+        {
+            mNeedToSave = true;
+            if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPolygon)
+            {
+                Int32 pointsNum = mSketchingShape.Last().Count;
+                Int32 partsNum = mSketchingShape.Count;
+                if (partsNum == 1) InitializeSketchingShape();
+                else
+                {
+                    if (pointsNum == 0)
+                    {
+                        if (partsNum == 2) InitializeSketchingShape();
+                        else mSketchingShape.RemoveAt(partsNum - 1);
+                    }
+                    else mSketchingShape.RemoveAt(partsNum - 1);
+                }
+                moMapControl1.RedrawTrackingShapes();
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPolyline)
+            {
+                Int32 pointsNum = mSketchingShape.Last().Count;
+                Int32 partsNum = mSketchingShape.Count;
+                if (partsNum == 1) InitializeSketchingShape();
+                else
+                {
+                    if (pointsNum == 0)
+                    {
+                        if (partsNum == 2) InitializeSketchingShape();
+                        else mSketchingShape.RemoveAt(partsNum - 1);
+                    }
+                    else mSketchingShape.RemoveAt(partsNum - 1);
+                }
+                moMapControl1.RedrawTrackingShapes();
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.Point)
+            {
+                ;
+            }
+            else if (shapeType == MyMapObjects.moGeometryTypeConstant.MultiPoint)
+            {
+                Int32 pointsNum = mSketchingPoint.Count;
+                if (pointsNum == 0) return;
+                mSketchingPoint.RemoveAt(pointsNum - 1);
+                moMapControl1.RedrawTrackingShapes();
+            }
+        }
+
+        //撤销上一个草图
+        private void DeleteLastSketchGeo()
+        {
+            mNeedToSave = true;
+            InitializeSketchingShape();
+            moMapControl1.RedrawTrackingShapes();
+        }
+
 
         #endregion
 

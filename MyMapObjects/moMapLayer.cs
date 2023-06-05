@@ -179,6 +179,23 @@ namespace MyMapObjects
 
         #region 方法
         /// <summary>
+        /// 移除选择
+        /// </summary>
+        public void RemoveSelection()
+        {
+            MyMapObjects.moFeatures sFeatures = new MyMapObjects.moFeatures();
+            for (Int32 i = 0; i < _Features.Count; ++i)
+            {
+                if (SelectIndex.Contains(i) == false)
+                {
+                    sFeatures.Add(_Features.GetItem(i));
+                }
+            }
+            _Features = sFeatures;
+            _SelectedFeatures.Clear();
+            UpdateExtent();
+        }
+        /// <summary>
         /// 更新范围
         /// </summary>
         public void UpdateExtent()
