@@ -56,6 +56,13 @@ namespace MyMapObjects
 
 
         #region 属性
+        /// <summary>
+        /// 获取选择的index列表
+        /// </summary>
+        public List<Int32> SelectIndex
+        {
+            get { return GetSelectIndex(); }
+        }
 
         /// <summary>
         /// 获取图层的要素几何类型
@@ -863,6 +870,23 @@ namespace MyMapObjects
                 { return true; }
             }
             return false;
+        }
+
+        private List<Int32> GetSelectIndex()
+        {
+            List<Int32> selectIndex = new List<Int32>();
+            for (Int32 i = 0; i < _SelectedFeatures.Count; ++i)
+            {
+                for (Int32 j = 0; j < _Features.Count; ++j)
+                {
+                    if (_Features.GetItem(j) == _SelectedFeatures.GetItem(i))
+                    {
+                        selectIndex.Add(j);
+                        break;
+                    }
+                }
+            }
+            return selectIndex;
         }
 
         #endregion
